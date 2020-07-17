@@ -49,7 +49,8 @@ Displays information for the id-th file or directory of the chosen slot.
 `extract`
 ---
 ```
-extract <in|out> <\*|id> "C:/dir/to/extract/to"
+extract <in|out> <*|id> "C:/dir/to/extract/to"
 ```
 If given an id, it extracts the file with the specified id from the chosen slot to the given directory.
+
 If '\*' is given instead of an id, it fully extracts the RKV, properly setting up symlinks, static files, and directory structures.
