@@ -596,8 +596,10 @@ bool extractRKV(RKVFile* r, std::string output_base, long long index, bool prese
     return true;
 }
 
-bool loadDirectoryIntoRKV(RKVFile* r, std::string dir_path, bool recursive)
+bool loadDirectoryIntoRKV(RKVFile* r, std::string dir_path, std::string spec_path, bool recursive)
 {
+    if (r->loaded) { return false; }
+
     //load directory and its files
     fs::path base(dir_path);
     unsigned char base_length = base.string().length();
@@ -606,6 +608,10 @@ bool loadDirectoryIntoRKV(RKVFile* r, std::string dir_path, bool recursive)
     if (r->firstLoad)
     {
         r->in_base = base.string().append("\\");
+
+        UngeneratedDirEntry spec;
+        spec.relative_dir = spec_path;
+        r->dirs_to_gen.push_back(spec);
 
         UngeneratedDirEntry base;
         base.relative_dir = "";
@@ -617,6 +623,43 @@ bool loadDirectoryIntoRKV(RKVFile* r, std::string dir_path, bool recursive)
     if(recursive)
     {
         fs::path p;
+        fs::recursive_directory_iterator spec_i(dir_path + "\\" + spec_path);
+        for (fs::recursive_directory_iterator curr = begin(spec_i); curr != end(spec_i); curr++)
+        {
+            p = curr->path();
+            p.make_preferred();
+            if (fs::is_regular_file(*curr))
+            {
+                UngeneratedFileEntry f;
+                f.file_path = p.string();
+                f.file_name = p.filename().string();
+                if (p.parent_path().string().length() < base_length)
+                {
+                    f.relative_dir = spec_path;
+                }
+                else
+                {
+                    temp = p.parent_path().string().substr(base_length, p.parent_path().string().length()-base_length);
+                    if (!temp.empty())
+                    {
+                        temp.append("\\");
+                        temp = temp.substr(1, temp.length()-1);
+                    }
+                    f.relative_dir = temp;
+                }
+
+                r->files_to_gen.push_back(f);
+            }
+            else if (fs::is_directory(*curr))
+            {
+                //create the directory entry
+                UngeneratedDirEntry d;
+                d.relative_dir = p.string().substr(base_length+1, p.string().length()-base_length).append("\\");
+
+                r->dirs_to_gen.push_back(d);
+            }
+        }
+
         fs::recursive_directory_iterator i(dir_path);
         for (fs::recursive_directory_iterator curr = begin(i); curr != end(i); curr++)
         {
@@ -627,13 +670,20 @@ bool loadDirectoryIntoRKV(RKVFile* r, std::string dir_path, bool recursive)
                 UngeneratedFileEntry f;
                 f.file_path = p.string();
                 f.file_name = p.filename().string();
-                temp = p.parent_path().string().substr(base_length, p.parent_path().string().length()-base_length);
-                if (!temp.empty())
+                if (p.parent_path().string().length() < base_length)
                 {
-                    temp.append("\\");
-                    temp = temp.substr(1, temp.length()-1);
+                    f.relative_dir = spec_path;
                 }
-                f.relative_dir = temp;
+                else
+                {
+                    temp = p.parent_path().string().substr(base_length, p.parent_path().string().length()-base_length);
+                    if (!temp.empty())
+                    {
+                        temp.append("\\");
+                        temp = temp.substr(1, temp.length()-1);
+                    }
+                    f.relative_dir = temp;
+                }
 
                 r->files_to_gen.push_back(f);
             }
@@ -650,6 +700,43 @@ bool loadDirectoryIntoRKV(RKVFile* r, std::string dir_path, bool recursive)
     else
     {
         fs::path p;
+        fs::directory_iterator spec_i(dir_path + "\\" + spec_path);
+        for (fs::directory_iterator curr = begin(spec_i); curr != end(spec_i); curr++)
+        {
+            p = curr->path();
+            p.make_preferred();
+            if (fs::is_regular_file(*curr))
+            {
+                UngeneratedFileEntry f;
+                f.file_path = p.string();
+                f.file_name = p.filename().string();
+                if (p.parent_path().string().length() < base_length)
+                {
+                    f.relative_dir = spec_path;
+                }
+                else
+                {
+                    temp = p.parent_path().string().substr(base_length, p.parent_path().string().length()-base_length);
+                    if (!temp.empty())
+                    {
+                        temp.append("\\");
+                        temp = temp.substr(1, temp.length()-1);
+                    }
+                    f.relative_dir = temp;
+                }
+
+                r->files_to_gen.push_back(f);
+            }
+            else if (fs::is_directory(*curr))
+            {
+                //create the directory entry
+                UngeneratedDirEntry d;
+                d.relative_dir = p.string().substr(base_length+1, p.string().length()-base_length).append("\\");
+
+                r->dirs_to_gen.push_back(d);
+            }
+        }
+
         fs::directory_iterator i(dir_path);
         for (fs::directory_iterator curr = begin(i); curr != end(i); curr++)
         {
@@ -660,13 +747,20 @@ bool loadDirectoryIntoRKV(RKVFile* r, std::string dir_path, bool recursive)
                 UngeneratedFileEntry f;
                 f.file_path = p.string();
                 f.file_name = p.filename().string();
-                temp = p.parent_path().string().substr(base_length, p.parent_path().string().length()-base_length);
-                if (!temp.empty())
+                if (p.parent_path().string().length() < base_length)
                 {
-                    temp.append("\\");
-                    temp = temp.substr(1, temp.length()-1);
+                    f.relative_dir = spec_path;
                 }
-                f.relative_dir = temp;
+                else
+                {
+                    temp = p.parent_path().string().substr(base_length, p.parent_path().string().length()-base_length);
+                    if (!temp.empty())
+                    {
+                        temp.append("\\");
+                        temp = temp.substr(1, temp.length()-1);
+                    }
+                    f.relative_dir = temp;
+                }
 
                 r->files_to_gen.push_back(f);
             }
@@ -704,10 +798,29 @@ struct
         std::string temp1, temp2;
         temp1 = d1.relative_dir;
         temp2 = d2.relative_dir;
+        size_t c1 = std::count(temp1.begin(), temp1.end(), '\\');
+        size_t c2 = std::count(temp2.begin(), temp2.end(), '\\');
+        bool prior1 = temp1.substr(0, 2) == ".." ? true : false;
+        bool prior2 = temp2.substr(0, 2) == ".." ? true : false;
         std::transform(temp1.begin(), temp1.end(), temp1.begin(), [](unsigned char c) -> unsigned char { return std::tolower(c); });
         std::transform(temp2.begin(), temp2.end(), temp2.begin(), [](unsigned char c) -> unsigned char { return std::tolower(c); });
 
-        return temp1.compare(temp2) < 0 ? true : false;
+        if ((prior1 | prior2) && (prior1 ^ prior2))
+        {
+            if (prior1)
+            {
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+        if (c1 != c2)
+        {
+            return c1 < c2 ? true : false;
+        }
+        return temp1.compare(temp2) < 0 ? true : false; //temp1 is earlier than temp2
     }
 } UngeneratedDirCompare;
 
@@ -747,10 +860,12 @@ unsigned long long getRoundedPointer(unsigned long long s)
     return c;
 }
 
-//fix this :/
-bool processFileEntry(RKVFile* r, std::unordered_map<std::string, UngeneratedFileEntry> file_map, std::unordered_map<std::string, UngeneratedDirEntry> dir_map, UngeneratedFileEntry& f,
-                       unsigned long& unique_id, unsigned long long& curr_data_pointer, unsigned long*& symlink_ids, unsigned long& symlink_count)
+bool processFileEntry(RKVFile* r, std::unordered_map<std::string, unsigned long>& file_map, std::unordered_map<std::string, unsigned long>& dir_map, UngeneratedFileEntry& f,
+                       unsigned long& curr_unique, unsigned long long& curr_data_pointer, unsigned long*& symlink_ids, unsigned long& symlink_count, unsigned long& file_entry)
 {
+    if (curr_unique > 0x00FFFFFF) { return false; }
+
+    std::fstream file_in;
     if(file_map.contains(f.file_name.substr(0, FILE_NAME_LENGTH-1)))
     {
         if(f.static_file)
@@ -764,7 +879,7 @@ bool processFileEntry(RKVFile* r, std::unordered_map<std::string, UngeneratedFil
         }
         else
         {
-            working_id = file_map[f.file_name];
+            unsigned long working_id = file_map[f.file_name];
             strncpy(r->files[working_id].name, f.file_name.substr(0, FILE_NAME_LENGTH-1).c_str(), FILE_NAME_LENGTH-1);
             r->files[working_id].name[FILE_NAME_LENGTH-1] = 0x00;
             r->files[working_id].directory_index = dir_map[f.relative_dir];
@@ -808,7 +923,11 @@ bool processFileEntry(RKVFile* r, std::unordered_map<std::string, UngeneratedFil
 
             r->files_to_gen.at(file_entry).processed = true;
         }
+
+        return true;
     }
+    printf("File map miss for '%s'\n", f.file_name.c_str());
+    return true;
 }
 
 bool generateRKV(RKVFile* r)
@@ -888,31 +1007,36 @@ bool generateRKV(RKVFile* r)
     file_map.reserve(r->files_to_gen.size());
     r->file_count = 0;
     //we have a hashmap here just for fast lookups if a file already exists
-    for (UngeneratedFileEntry f : r->files_to_gen)
+    for (auto f = r->files_to_gen.begin(); f != r->files_to_gen.end(); f++)
     {
-        if (f.file_name == ".order") { continue; }
-        if(!file_map.contains(f.file_name.substr(0, FILE_NAME_LENGTH-1)))
+        if (f->file_name == ".order")
         {
-            file_map[f.file_name.substr(0, FILE_NAME_LENGTH-1)] = r->file_count;
+            f = r->files_to_gen.erase(f);
+            printf(".order filtered!\n");
+            f--;
+            continue;
+        }
+        if(!file_map.contains(f->file_name.substr(0, FILE_NAME_LENGTH-1)))
+        {
+            file_map[f->file_name.substr(0, FILE_NAME_LENGTH-1)] = r->file_count;
             r->file_count++;
             r->data_size += FILE_ENTRY_PHYSICAL_SIZE;
         }
         else
         {
-            printf("Duplicate File '%s'\n", f.file_name.substr(0, FILE_NAME_LENGTH-1).c_str());
+            printf("Duplicate File '%s'\n", f->file_name.substr(0, FILE_NAME_LENGTH-1).c_str());
         }
     }
 
     unsigned long long curr_data_pointer = 0x00;
     unsigned long curr_unique = 0x00000000;
-    unsigned long working_id = 0;
+    //unsigned long working_id = 0;
     std::fstream file_in;
     r->files = new FileEntry[r->file_count];
     unsigned long* symlink_ids = new unsigned long[r->file_count];
     unsigned long symlink_count = 0;
-    //creates file entries
 
-    //do the pp_dir first
+    //PP_DIR MAGIC
     if (r->contains_pp)
     {
         unsigned long pp_count = 0;
@@ -946,10 +1070,11 @@ bool generateRKV(RKVFile* r)
             {
                 if (file_map.contains(r->pp_file_names[p]))
                 {
-                    unsigned long my_id = file_map[r->pp_file_names[p]];
+                    //unsigned long my_id = file_map[r->pp_file_names[p]];
                     UngeneratedFileEntry my_entry;
                     bool found = false;
-                    for (unsigned long f_id = 0; f_id < r->files_to_gen.size(); f_id++)
+                    unsigned long f_id = 0;
+                    for (; f_id < r->files_to_gen.size(); f_id++)
                     {
                         if (r->pp_file_names[p].compare(r->files_to_gen.at(f_id).file_name) == 0)
                         {
@@ -962,57 +1087,13 @@ bool generateRKV(RKVFile* r)
 
                     if (found)
                     {
-                        if (curr_unique > 0x00FFFFFF)
+                        bool ret = false;
+                        ret = processFileEntry(r, file_map, dir_map, my_entry, curr_unique, curr_data_pointer, symlink_ids, symlink_count, f_id);
+                        if (!ret)
                         {
-                            printf("Unique IDs Overwhelmed!\n");
-                            break;
-                        }
-
-                        if(my_entry.static_file)
-                        {
-                            r->files[my_id].static_file = my_entry.static_file;
-                        }
-
-                        strncpy(r->files[my_id].name, my_entry.file_name.substr(0, FILE_NAME_LENGTH-1).c_str(), FILE_NAME_LENGTH-1);
-                        r->files[my_id].name[FILE_NAME_LENGTH-1] = 0x00;
-                        r->files[my_id].directory_index = dir_map[my_entry.relative_dir];
-                        if (!r->files[my_id].static_file)
-                        {
-                            r->files[my_id].unique_id = curr_unique | 0xFF000000;
-                        }
-                        else
-                        {
-                            r->files[my_id].unique_id = curr_unique;
-                        }
-
-                        curr_unique++;
-
-                        file_in.open(my_entry.file_path, std::ios::in | std::ios::binary);
-                        if (file_in.bad() || !file_in.is_open())
-                        {
-                            printf("Cannot load file: %s\n", my_entry.file_path.c_str());
-                            unloadRKV(r);
+                            printf("Error in file entry processing!\n");
                             return false;
                         }
-
-                        file_in.seekg(0, file_in.end);
-                        file_in.clear();
-                        r->files[my_id].file_size = file_in.tellg();
-                        r->files[my_id].file_physical_data = new char[r->files[my_id].file_size];
-
-                        file_in.seekg(0, file_in.beg);
-                        file_in.read(r->files[my_id].file_physical_data, r->files[my_id].file_size);
-                        file_in.close();
-
-                        r->files[my_id].crc32 = crc32(r->files[my_id].file_physical_data, r->files[my_id].file_size);
-                        r->files[my_id].timestamp = std::chrono::system_clock::to_time_t(fs::last_write_time(my_entry.file_path));
-                        //EDIT THE ROUNDING MECHANISM HERE
-                        r->files[my_id].physical_file_size = getRoundedFileSize_Large(r->files[my_id].file_size);
-
-                        r->files[my_id].physical_data_pointer = curr_data_pointer;
-                        curr_data_pointer += r->files[my_id].physical_file_size;
-
-                        r->data_size += r->files[my_id].physical_file_size;
                     }
                     else
                     {
@@ -1027,166 +1108,40 @@ bool generateRKV(RKVFile* r)
         }
     }
 
-    for (unsigned long file_entry = 0; file_entry < r->files_to_gen.size(); file_entry++)
+    //REGULAR FILES
+    for (unsigned long dir_i = 0; dir_i < r->directory_count; dir_i++)
     {
-        if (curr_unique > 0x00FFFFFF)
+        if (dir_i == r->pp_dir_ind) { continue; }
+        else
         {
-            printf("Unique IDs Overwhelmed!\n");
-            break;
-        }
-
-        UngeneratedFileEntry f = r->files_to_gen.at(file_entry);
-        if (f.processed) { continue; }
-        else if (f.file_name.substr(f.file_name.length() - 4, 4) == ".lv2")
-        {
-            continue;
-        }
-    }
-
-    for (unsigned long file_entry = 0; file_entry < r->files_to_gen.size(); file_entry++)
-    {
-        if (curr_unique > 0x00FFFFFF)
-        {
-            printf("Unique IDs Overwhelmed!\n");
-            break;
-        }
-
-        UngeneratedFileEntry f = r->files_to_gen.at(file_entry);
-        if (f.processed) { continue; }
-
-        if(file_map.contains(f.file_name.substr(0, FILE_NAME_LENGTH-1)))
-        {
-            if(f.static_file)
+            for (unsigned long file_entry = 0; file_entry < r->files_to_gen.size(); file_entry++)
             {
-                r->files[file_map[f.file_name]].static_file = f.static_file;
-            }
-            if(f.symlink)
-            {
-                symlink_ids[symlink_count] = file_entry;
-                symlink_count++;
-            }
-            else
-            {
-                working_id = file_map[f.file_name];
-                strncpy(r->files[working_id].name, f.file_name.substr(0, FILE_NAME_LENGTH-1).c_str(), FILE_NAME_LENGTH-1);
-                r->files[working_id].name[FILE_NAME_LENGTH-1] = 0x00;
-                r->files[working_id].directory_index = dir_map[f.relative_dir];
-                if (!r->files[working_id].static_file)
+                if (curr_unique > 0x00FFFFFF)
                 {
-                    r->files[working_id].unique_id = curr_unique | 0xFF000000;
-                }
-                else
-                {
-                    r->files[working_id].unique_id = curr_unique;
+                    printf("Unique IDs Overwhelmed!\n");
+                    break;
                 }
 
-                curr_unique++;
-
-                file_in.open(f.file_path, std::ios::in | std::ios::binary);
-                if (file_in.bad() || !file_in.is_open())
+                UngeneratedFileEntry f = r->files_to_gen.at(file_entry);
+                if (f.processed)
                 {
-                    printf("Cannot load file: %s\n", f.file_path.c_str());
-                    unloadRKV(r);
-                    return false;
+                    continue;
                 }
-
-                file_in.seekg(0, file_in.end);
-                file_in.clear();
-                r->files[working_id].file_size = file_in.tellg();
-                r->files[working_id].file_physical_data = new char[r->files[working_id].file_size];
-
-                file_in.seekg(0, file_in.beg);
-                file_in.read(r->files[working_id].file_physical_data, r->files[working_id].file_size);
-                file_in.close();
-
-                r->files[working_id].crc32 = crc32(r->files[working_id].file_physical_data, r->files[working_id].file_size);
-                r->files[working_id].timestamp = std::chrono::system_clock::to_time_t(fs::last_write_time(f.file_path));
-                //EDIT THE ROUNDING MECHANISM HERE
-                r->files[working_id].physical_file_size = getRoundedFileSize_Large(r->files[working_id].file_size);
-
-                r->files[working_id].physical_data_pointer = curr_data_pointer;
-                curr_data_pointer += r->files[working_id].physical_file_size;
-
-                r->data_size += r->files[working_id].physical_file_size;
-
-                r->files_to_gen.at(file_entry).processed = true;
+                else if (dir_map[f.relative_dir] == dir_i)
+                {
+                    bool ret = false;
+                    ret = processFileEntry(r, file_map, dir_map, f, curr_unique, curr_data_pointer, symlink_ids, symlink_count, file_entry);
+                    if (!ret)
+                    {
+                        printf("Error in file entry processing!\n");
+                        return false;
+                    }
+                }
             }
         }
     }
 
-    for (unsigned long file_entry = 0; file_entry < r->files_to_gen.size(); file_entry++)
-    {
-        if (curr_unique > 0x00FFFFFF)
-        {
-            printf("Unique IDs Overwhelmed!\n");
-            break;
-        }
-
-        UngeneratedFileEntry f = r->files_to_gen.at(file_entry);
-        if (f.processed) { continue; }
-        else if (f.file_name.substr(f.file_name.length() - 4, 4) != ".wpk")
-        {
-            continue;
-        }
-
-        if(file_map.contains(f.file_name.substr(0, FILE_NAME_LENGTH-1)))
-        {
-            if(f.static_file)
-            {
-                r->files[file_map[f.file_name]].static_file = f.static_file;
-            }
-            if(f.symlink)
-            {
-                symlink_ids[symlink_count] = file_entry;
-                symlink_count++;
-            }
-            else
-            {
-                working_id = file_map[f.file_name];
-                strncpy(r->files[working_id].name, f.file_name.substr(0, FILE_NAME_LENGTH-1).c_str(), FILE_NAME_LENGTH-1);
-                r->files[working_id].name[FILE_NAME_LENGTH-1] = 0x00;
-                r->files[working_id].directory_index = dir_map[f.relative_dir];
-                if (!r->files[working_id].static_file)
-                {
-                    r->files[working_id].unique_id = curr_unique | 0xFF000000;
-                }
-                else
-                {
-                    r->files[working_id].unique_id = curr_unique;
-                }
-
-                curr_unique++;
-
-                file_in.open(f.file_path, std::ios::in | std::ios::binary);
-                if (file_in.bad() || !file_in.is_open())
-                {
-                    printf("Cannot load file: %s\n", f.file_path.c_str());
-                    unloadRKV(r);
-                    return false;
-                }
-
-                file_in.seekg(0, file_in.end);
-                file_in.clear();
-                r->files[working_id].file_size = file_in.tellg();
-                r->files[working_id].file_physical_data = new char[r->files[working_id].file_size];
-
-                file_in.seekg(0, file_in.beg);
-                file_in.read(r->files[working_id].file_physical_data, r->files[working_id].file_size);
-                file_in.close();
-
-                r->files[working_id].crc32 = crc32(r->files[working_id].file_physical_data, r->files[working_id].file_size);
-                r->files[working_id].timestamp = std::chrono::system_clock::to_time_t(fs::last_write_time(f.file_path));
-                //EDIT THE ROUNDING MECHANISM HERE
-                r->files[working_id].physical_file_size = getRoundedFileSize_Large(r->files[working_id].file_size);
-
-                r->files[working_id].physical_data_pointer = curr_data_pointer;
-                curr_data_pointer += r->files[working_id].physical_file_size;
-
-                r->data_size += r->files[working_id].physical_file_size;
-            }
-        }
-    }
-
+    //SYMLINK
     unsigned long id_of_link = 0;
     char* in_string = new char[FILE_NAME_LENGTH];
     for (unsigned long c = 0; c < symlink_count; c++)
@@ -1194,7 +1149,7 @@ bool generateRKV(RKVFile* r)
         UngeneratedFileEntry mine = r->files_to_gen.at(symlink_ids[c]);
         unsigned long arr_id = file_map[mine.file_name];
 
-        strncpy(r->files[arr_id].name, mine.file_name.substr(1, FILE_NAME_LENGTH-1).c_str(), FILE_NAME_LENGTH-1);
+        strncpy(r->files[arr_id].name, mine.file_name.substr(0, FILE_NAME_LENGTH-1).c_str(), FILE_NAME_LENGTH-1);
         r->files[arr_id].name[FILE_NAME_LENGTH-1] = 0x00;
         r->files[arr_id].directory_index = dir_map[mine.relative_dir];
         r->files[arr_id].physical_data_pointer = 0xFFFFFFFF;
@@ -1243,8 +1198,11 @@ bool generateRKV(RKVFile* r)
     for (unsigned long p_id = 0; p_id < r->file_count; p_id++)
     {
         if (r->files[p_id].physical_data_pointer == 0xFFFFFFFF) { continue; }
-        last_loc = r->files[p_id].physical_data_pointer + r->files[p_id].file_size;
-        rounded_loc = r->files[p_id].physical_data_pointer + r->files[p_id].physical_file_size;
+        else if (r->files[p_id].physical_data_pointer + r->files[p_id].file_size > last_loc)
+        {
+            last_loc = r->files[p_id].physical_data_pointer + r->files[p_id].file_size;
+            rounded_loc = r->files[p_id].physical_data_pointer + r->files[p_id].physical_file_size;
+        }
     }
 
     last_loc = getRoundedPointer(last_loc);
@@ -1351,8 +1309,7 @@ bool saveRKV(RKVFile* r, std::string file_out)
     return true;
 }
 
-const unsigned long long cutoffAddr = 0x01011000;
-//error whereby the last entry is always true cause it conflicts with the entry table @w@
+//const unsigned long long cutoffAddr = 0x01011000;
 bool stats(RKVFile* r, std::string out_log)
 {
     if (!r->generated || !r->loaded)
@@ -1368,18 +1325,23 @@ bool stats(RKVFile* r, std::string out_log)
         return false;
     }
 
-    //write to log
     char* out_str = new char[256];
     unsigned char s_length = 0;
 
+    std::vector<FileEntry> all_files;
+    all_files.reserve(r->file_count);
     for (unsigned long f = 0; f < r->file_count; f++)
     {
-        if (r->files[f].physical_data_pointer <= cutoffAddr)
-        {
-            s_length = sprintf(out_str, "Addr: 0x%.8lX - '%s'\n", r->files[f].physical_data_pointer, r->files[f].name);
-            data_log.write(out_str, s_length);
-        }
+        all_files.push_back(r->files[f]);
     }
+    std::sort(all_files.begin(), all_files.end(), FileEntryPhysicalPointerCompare);
+
+    for (FileEntry f : all_files)
+    {
+        s_length = sprintf(out_str, "%s%s\n", f.name, f.physical_data_pointer == 0xFFFFFFFF ? " - Sym" : "");
+        data_log.write(out_str, s_length);
+    }
+
     data_log.close();
     delete[] out_str;
 
@@ -1732,18 +1694,18 @@ int main (int argc, char* argv[])
             }
             else if (args[0] == "load_dir")
             {
-                if (!(argCount >= 3))
+                if (!(argCount >= 4))
                 {
                     printf("Incorrect Args\n");
                 }
-                else if (args[2] == "in")
+                else if (args[3] == "in")
                 {
-                    response = loadDirectoryIntoRKV(&in, args[1], args[3] == "false" ? false : true);
+                    response = loadDirectoryIntoRKV(&in, args[1], args[2], args[4] == "false" ? false : true);
                     printBool(response);
                 }
-                else if (args[2] == "out")
+                else if (args[3] == "out")
                 {
-                    response = loadDirectoryIntoRKV(&out, args[1], args[3] == "false" ? false : true);
+                    response = loadDirectoryIntoRKV(&out, args[1], args[2], args[4] == "false" ? false : true);
                     printBool(response);
                 }
             }
