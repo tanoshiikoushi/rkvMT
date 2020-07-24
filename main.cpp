@@ -357,7 +357,7 @@ bool extractRKV(RKVFile* r, std::string output_base, long long index, bool prese
 
     if (!exists)
     {
-        fs::create_directory(output_base);
+        fs::create_directories(output_base);
     }
     else if (exists && !is_dir)
     {
@@ -414,7 +414,7 @@ bool extractRKV(RKVFile* r, std::string output_base, long long index, bool prese
 
             if (!exists)
             {
-                fs::create_directory(ext_dir);
+                fs::create_directories(ext_dir);
             }
             else if (exists && !is_dir)
             {
@@ -607,7 +607,23 @@ bool loadDirectoryIntoRKV(RKVFile* r, std::string dir_path, std::string spec_pat
 
     if (r->firstLoad)
     {
-        r->in_base = base.string().append("\\");
+        r->in_base = base.string();
+        if (r->in_base.substr(r->in_base.length()-1, 1) != "/" && r->in_base.substr(r->in_base.length()-1, 1) != "\\")
+        {
+            r->in_base.push_back('\\');
+        }
+
+        if (spec_path.substr(0, 2) != "..")
+        {
+            r->in_base = "";
+            printf("Specific Path is not above the data path\n");
+            return false;
+        }
+
+        if (spec_path.substr(spec_path.length()-1, 1) != "/" && spec_path.substr(spec_path.length()-1, 1) != "\\")
+        {
+            spec_path.push_back('\\');
+        }
 
         UngeneratedDirEntry spec;
         spec.relative_dir = spec_path;
@@ -623,7 +639,7 @@ bool loadDirectoryIntoRKV(RKVFile* r, std::string dir_path, std::string spec_pat
     if(recursive)
     {
         fs::path p;
-        fs::recursive_directory_iterator spec_i(dir_path + "\\" + spec_path);
+        fs::recursive_directory_iterator spec_i(r->in_base + spec_path);
         for (fs::recursive_directory_iterator curr = begin(spec_i); curr != end(spec_i); curr++)
         {
             p = curr->path();
@@ -643,7 +659,7 @@ bool loadDirectoryIntoRKV(RKVFile* r, std::string dir_path, std::string spec_pat
                     if (!temp.empty())
                     {
                         temp.append("\\");
-                        temp = temp.substr(1, temp.length()-1);
+                        temp = temp.substr(0, temp.length()-1);
                     }
                     f.relative_dir = temp;
                 }
@@ -660,7 +676,7 @@ bool loadDirectoryIntoRKV(RKVFile* r, std::string dir_path, std::string spec_pat
             }
         }
 
-        fs::recursive_directory_iterator i(dir_path);
+        fs::recursive_directory_iterator i(r->in_base);
         for (fs::recursive_directory_iterator curr = begin(i); curr != end(i); curr++)
         {
             p = curr->path();
@@ -680,7 +696,7 @@ bool loadDirectoryIntoRKV(RKVFile* r, std::string dir_path, std::string spec_pat
                     if (!temp.empty())
                     {
                         temp.append("\\");
-                        temp = temp.substr(1, temp.length()-1);
+                        temp = temp.substr(0, temp.length()-1);
                     }
                     f.relative_dir = temp;
                 }
@@ -700,7 +716,7 @@ bool loadDirectoryIntoRKV(RKVFile* r, std::string dir_path, std::string spec_pat
     else
     {
         fs::path p;
-        fs::directory_iterator spec_i(dir_path + "\\" + spec_path);
+        fs::directory_iterator spec_i(r->in_base + spec_path);
         for (fs::directory_iterator curr = begin(spec_i); curr != end(spec_i); curr++)
         {
             p = curr->path();
@@ -737,7 +753,7 @@ bool loadDirectoryIntoRKV(RKVFile* r, std::string dir_path, std::string spec_pat
             }
         }
 
-        fs::directory_iterator i(dir_path);
+        fs::directory_iterator i(r->in_base);
         for (fs::directory_iterator curr = begin(i); curr != end(i); curr++)
         {
             p = curr->path();
@@ -1309,152 +1325,6 @@ bool saveRKV(RKVFile* r, std::string file_out)
     return true;
 }
 
-//const unsigned long long cutoffAddr = 0x01011000;
-bool stats(RKVFile* r, std::string out_log)
-{
-    if (!r->generated || !r->loaded)
-    {
-        return false;
-    }
-
-    std::fstream data_log;
-    data_log.open(out_log, std::ios::out | std::ios::binary);
-    if (data_log.bad() || !data_log.is_open())
-    {
-        printf("Cannot open file to write: %s\n", out_log.c_str());
-        return false;
-    }
-
-    char* out_str = new char[256];
-    unsigned char s_length = 0;
-
-    std::vector<FileEntry> all_files;
-    all_files.reserve(r->file_count);
-    for (unsigned long f = 0; f < r->file_count; f++)
-    {
-        all_files.push_back(r->files[f]);
-    }
-    std::sort(all_files.begin(), all_files.end(), FileEntryPhysicalPointerCompare);
-
-    for (FileEntry f : all_files)
-    {
-        s_length = sprintf(out_str, "%s%s\n", f.name, f.physical_data_pointer == 0xFFFFFFFF ? " - Sym" : "");
-        data_log.write(out_str, s_length);
-    }
-
-    data_log.close();
-    delete[] out_str;
-
-    /*bool* exists_stat = new bool [r->data_size];
-    for (unsigned long long l = 0; l < r->data_size; l++)
-    {
-        exists_stat[l] = false;
-    }
-
-    for (unsigned long long e = 0; e < 8; e++)
-    {
-        exists_stat[r->data_size - e] = true;
-    }
-
-    //process directories
-    unsigned long long curr_pos = r->data_size - 0x8;
-    for (unsigned long m = 0; m < r->directory_count; m++)
-    {
-        for (unsigned long s = 0; s <= DIRECTORY_ENTRY_PHYSICAL_SIZE; s++)
-        {
-            exists_stat[curr_pos-s] = true;
-        }
-        curr_pos -= DIRECTORY_ENTRY_PHYSICAL_SIZE;
-    }
-
-    //process files
-    for (unsigned long f = 0; f < r->file_count; f++)
-    {
-        for (unsigned long s = 0; s <= FILE_ENTRY_PHYSICAL_SIZE; s++)
-        {
-            exists_stat[curr_pos-s] = true;
-        }
-        curr_pos -= FILE_ENTRY_PHYSICAL_SIZE;
-
-        if (r->files[f].physical_data_pointer != 0xFFFFFFFF)
-        {
-            unsigned long f_pos = r->files[f].physical_data_pointer;
-            for (unsigned long l = 0; l < getRoundedFileSize_Large(r->files[f].file_size); l++)
-            {
-                exists_stat[f_pos+l] = true;
-            }
-        }
-    }
-
-    std::fstream data_log;
-    data_log.open(out_log, std::ios::out | std::ios::binary);
-    if (data_log.bad() || !data_log.is_open())
-    {
-        printf("Cannot open file to write: %s\n", out_log.c_str());
-        return false;
-    }
-
-    //write to log
-    char* out_str = new char[256];
-    unsigned char s_length = 0;
-
-    unsigned long long seq_start = 0;
-    unsigned long long seq_end = 0;
-
-    bool in_seq = false;
-    bool non_zero = false;
-
-    for (unsigned long long c = 0; c < r->data_size; c++)
-    {
-        switch (exists_stat[c])
-        {
-        case true:
-            if (in_seq)
-            {
-                seq_end = c-1;
-                in_seq = false;
-
-                s_length = sprintf(out_str, "Len: %.8llX - Pos: %.8llX-%.8llX - Non-Zero: %s\n", seq_end-seq_start, seq_start, seq_end, non_zero == true ? "true" : "false");
-                data_log.write(out_str, s_length);
-            }
-            break;
-        case false:
-            if (!in_seq)
-            {
-                seq_start = c;
-                in_seq = true;
-                if (r->physical_data[c] != 0x00)
-                {
-                    non_zero = true;
-                }
-                else
-                {
-                    non_zero = false;
-                }
-            }
-            else
-            {
-                if (!non_zero)
-                {
-                    if (r->physical_data[c] != 0x00)
-                    {
-                        non_zero = true;
-                    }
-                    else
-                    {
-                       non_zero = false;
-                    }
-                }
-            }
-            break;
-        }
-    }
-
-    data_log.close();
-    delete[] exists_stat;*/
-    return true;
-}
-
 bool getCommandInput(std::string*& input, unsigned char& argCount)
 {
     for (unsigned char i = 0; i < argCount; i++)
@@ -1740,23 +1610,6 @@ int main (int argc, char* argv[])
                 else if (args[1] == "out")
                 {
                     response = saveRKV(&out, args[2]);
-                    printBool(response);
-                }
-            }
-            else if (args[0] == "stat")
-            {
-                if (argCount != 3)
-                {
-                    printf("Incorrect Args\n");
-                }
-                else if (args[1] == "in")
-                {
-                    response = stats(&in, args[2]);
-                    printBool(response);
-                }
-                else if (args[1] == "out")
-                {
-                    response = stats(&out, args[2]);
                     printBool(response);
                 }
             }
