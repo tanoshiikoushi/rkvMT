@@ -1,7 +1,7 @@
 #include <cstdio>
-#include <experimental/filesystem>
 #include <string>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <ctime>
 #include <chrono>
@@ -9,7 +9,27 @@
 #include <algorithm>
 #include <unordered_map>
 
-namespace fs = std::experimental::filesystem;
+namespace fs = std::filesystem;
+
+// <filesystem> may be standard in c++17 but standardization of chrono::file_clock is
+// scheduled for c++20 thus we don't have access to a file_clock::to_time_t or file_clock::from_time_t in c++17
+//
+// We can write a file_clock subclass struct that contains these definitions implemented in terms of
+// chrono::system_clock
+struct fixed_file_clock_t : public fs::file_time_type::clock {
+    using file_clock = fs::file_time_type::clock;
+    using sys_clock = std::chrono::system_clock;
+
+    static file_clock::time_point from_time_t( std::time_t t ) noexcept {
+        return file_clock::now() + (sys_clock::from_time_t(t) - sys_clock::now());
+    }
+
+    static std::time_t to_time_t( const file_clock::time_point& t ) noexcept {
+        return sys_clock::to_time_t((t - file_clock::now()) + sys_clock::now());
+    }
+};
+
+using file_clock = fixed_file_clock_t;
 
 //crc32 code
 /*-
@@ -399,7 +419,7 @@ bool extractRKV(RKVFile* r, std::string output_base, long long index, bool prese
             out_file.write(&r->physical_data[r->files[index].physical_data_pointer], r->files[index].file_size);
             out_file.close();
 
-            fs::last_write_time(output_base, std::chrono::system_clock::from_time_t(r->files[index].timestamp));
+            fs::last_write_time(output_base, file_clock::from_time_t(r->files[index].timestamp));
         }
     }
     else
@@ -473,7 +493,7 @@ bool extractRKV(RKVFile* r, std::string output_base, long long index, bool prese
                     out_file.write(&r->physical_data[r->files[i].physical_data_pointer], r->files[i].file_size);
                     out_file.close();
 
-                    fs::last_write_time(out_path, std::chrono::system_clock::from_time_t(r->files[i].timestamp));
+                    fs::last_write_time(out_path, file_clock::from_time_t(r->files[i].timestamp));
                 }
 
                 origFiles[origCount] = i;
@@ -563,7 +583,7 @@ bool extractRKV(RKVFile* r, std::string output_base, long long index, bool prese
                     }
                     out_file.close();
 
-                    fs::last_write_time(out_path, std::chrono::system_clock::from_time_t(r->files[symLinks[h]].timestamp));
+                    fs::last_write_time(out_path, file_clock::from_time_t(r->files[symLinks[h]].timestamp));
                 }
             }
         }
@@ -882,7 +902,7 @@ bool processFileEntry(RKVFile* r, std::unordered_map<std::string, unsigned long>
     if (curr_unique > 0x00FFFFFF) { return false; }
 
     std::fstream file_in;
-    if(file_map.contains(f.file_name.substr(0, FILE_NAME_LENGTH-1)))
+    if(file_map.count(f.file_name.substr(0, FILE_NAME_LENGTH-1)))
     {
         if(f.static_file)
         {
@@ -928,7 +948,7 @@ bool processFileEntry(RKVFile* r, std::unordered_map<std::string, unsigned long>
             file_in.close();
 
             r->files[working_id].crc32 = crc32(r->files[working_id].file_physical_data, r->files[working_id].file_size);
-            r->files[working_id].timestamp = std::chrono::system_clock::to_time_t(fs::last_write_time(f.file_path));
+            r->files[working_id].timestamp = file_clock::to_time_t(fs::last_write_time(f.file_path));
             //EDIT THE ROUNDING MECHANISM HERE
             r->files[working_id].physical_file_size = getRoundedFileSize_Large(r->files[working_id].file_size);
 
@@ -988,7 +1008,7 @@ bool generateRKV(RKVFile* r)
     //hashmap of directories for speed since we're doing 28k+ lookups
     for (UngeneratedDirEntry d : r->dirs_to_gen)
     {
-        if (!dir_map.contains(d.relative_dir))
+        if (!dir_map.count(d.relative_dir))
         {
             dir_map[d.relative_dir] = r->directory_count;
             r->directory_count++;
@@ -1009,7 +1029,7 @@ bool generateRKV(RKVFile* r)
         r->data_size += DIRECTORY_ENTRY_PHYSICAL_SIZE;
     }
 
-    if (dir_map.contains(pp_dir))
+    if (dir_map.count(pp_dir))
     {
         r->pp_dir_ind = dir_map[pp_dir];
         r->contains_pp = true;
@@ -1032,7 +1052,7 @@ bool generateRKV(RKVFile* r)
             f--;
             continue;
         }
-        if(!file_map.contains(f->file_name.substr(0, FILE_NAME_LENGTH-1)))
+        if(!file_map.count(f->file_name.substr(0, FILE_NAME_LENGTH-1)))
         {
             file_map[f->file_name.substr(0, FILE_NAME_LENGTH-1)] = r->file_count;
             r->file_count++;
@@ -1084,7 +1104,7 @@ bool generateRKV(RKVFile* r)
 
             for (unsigned long p = 0; p < pp_count; p++)
             {
-                if (file_map.contains(r->pp_file_names[p]))
+                if (file_map.count(r->pp_file_names[p]))
                 {
                     //unsigned long my_id = file_map[r->pp_file_names[p]];
                     UngeneratedFileEntry my_entry;
@@ -1195,7 +1215,7 @@ bool generateRKV(RKVFile* r)
         in_string[FILE_NAME_LENGTH-1] = 0x00;
         std::string in_string_conv(in_string);
 
-        if (file_map.contains(in_string_conv))
+        if (file_map.count(in_string_conv))
         {
             id_of_link = file_map[in_string_conv];
             r->files[arr_id].timestamp = r->files[id_of_link].timestamp;
