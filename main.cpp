@@ -1439,36 +1439,79 @@ int main (int argc, char* argv[])
     {
         getCommandInput(args, argCount);
 
-        /*for (int i = 0; i < argCount; i++)
+        //process the args in here
+        if (args[0] == "quit" || args[0] == "exit")
         {
-            printf("Arg #%i: %s\n", i, args[i].c_str());
-        }*/
-
-        if (argCount > 0)
+            unloadRKV(&in);
+            unloadRKV(&out);
+            quit = true;
+        }
+        else if (args[0] == "load")
         {
-            //process the args in here
-            if (args[0] == "quit" || args[0] == "exit")
+            if (argCount != 3)
             {
-                unloadRKV(&in);
-                unloadRKV(&out);
-                quit = true;
+                printf("Incorrect Args\n");
             }
-            else if (args[0] == "load")
+            else
             {
-                if (argCount != 3)
+                if (args[2] == "in")
                 {
-                    printf("Incorrect Args\n");
+                    response = loadRKV(&in, args[1]);
+                    printBool(response);
+                }
+                else if (args[2] == "out")
+                {
+                    response = loadRKV(&out, args[1]);
+                    printBool(response);
                 }
                 else
                 {
-                    if (args[2] == "in")
+                    printf("Incorrect Args\n");
+                }
+            }
+        }
+        else if (args[0] == "unload")
+        {
+            if (argCount != 2)
+            {
+                printf("Incorrect Args\n");
+            }
+            else
+            {
+                if (args[1] == "in")
+                {
+                    response = unloadRKV(&in);
+                    printBool(response);
+                }
+                else if (args[1] == "out")
+                {
+                    response = unloadRKV(&out);
+                    printBool(response);
+                }
+                else
+                {
+                    printf("Incorrect Args\n");
+                }
+            }
+        }
+        else if (args[0] == "poke")
+        {
+            if (argCount != 4)
+            {
+                printf("Incorrect Args\n");
+            }
+            else
+            {
+                if (args[1] == "in")
+                {
+                    if (args[2] == "file")
                     {
-                        response = loadRKV(&in, args[1]);
+                        response = pokeFile(&in, std::stol(args[3]));
                         printBool(response);
                     }
-                    else if (args[2] == "out")
+                    else if (args[2] == "dir")
                     {
-                        response = loadRKV(&out, args[1]);
+                        response = pokeDir(&in, std::stol(args[3]));
                         printBool(response);
                     }
                     else
@@ -1476,23 +1519,16 @@ int main (int argc, char* argv[])
                         printf("Incorrect Args\n");
                     }
                 }
-            }
-            else if (args[0] == "unload")
-            {
-                if (argCount != 2)
+                else if (args[1] == "out")
                 {
-                    printf("Incorrect Args\n");
-                }
-                else
-                {
-                    if (args[1] == "in")
+                    if (args[2] == "file")
                     {
-                        response = unloadRKV(&in);
+                        response = pokeFile(&out, std::stol(args[3]));
                         printBool(response);
                     }
-                    else if (args[1] == "out")
+                    else if (args[2] == "dir")
                     {
-                        response = unloadRKV(&out);
+                        response = pokeDir(&out, std::stol(args[3]));
                         printBool(response);
                     }
                     else
@@ -1500,138 +1536,94 @@ int main (int argc, char* argv[])
                         printf("Incorrect Args\n");
                     }
                 }
-            }
-            else if (args[0] == "poke")
-            {
-                if (argCount != 4)
+                else
                 {
                     printf("Incorrect Args\n");
+                }
+            }
+        }
+        else if (args[0] == "extract")
+        {
+            if (!(argCount >= 4))
+            {
+                printf("Incorrect Args\n");
+            }
+            else if (args[1] == "in")
+            {
+                if (args[2] == "*")
+                {
+                    response = extractRKV(&in, args[3], -1, args[4] == "false" ? false : true);
+                    printBool(response);
                 }
                 else
                 {
-                    if (args[1] == "in")
-                    {
-                        if (args[2] == "file")
-                        {
-                            response = pokeFile(&in, std::stol(args[3]));
-                            printBool(response);
-                        }
-                        else if (args[2] == "dir")
-                        {
-                            response = pokeDir(&in, std::stol(args[3]));
-                            printBool(response);
-                        }
-                        else
-                        {
-                            printf("Incorrect Args\n");
-                        }
-                    }
-                    else if (args[1] == "out")
-                    {
-                        if (args[2] == "file")
-                        {
-                            response = pokeFile(&out, std::stol(args[3]));
-                            printBool(response);
-                        }
-                        else if (args[2] == "dir")
-                        {
-                            response = pokeDir(&out, std::stol(args[3]));
-                            printBool(response);
-                        }
-                        else
-                        {
-                            printf("Incorrect Args\n");
-                        }
-                    }
-                    else
-                    {
-                        printf("Incorrect Args\n");
-                    }
-                }
-            }
-            else if (args[0] == "extract")
-            {
-                if (!(argCount >= 4))
-                {
-                    printf("Incorrect Args\n");
-                }
-                else if (args[1] == "in")
-                {
-                    if (args[2] == "*")
-                    {
-                        response = extractRKV(&in, args[3], -1, args[4] == "false" ? false : true);
-                        printBool(response);
-                    }
-                    else
-                    {
-                        response = extractRKV(&in, args[3], std::stol(args[2]), args[4] == "false" ? false : true);
-                        printBool(response);
-                    }
-                }
-                else if (args[1] == "out")
-                {
-                    if (args[2] == "*")
-                    {
-                        response = extractRKV(&out, args[3], -1, args[4] == "false" ? false : true);
-                        printBool(response);
-                    }
-                    else
-                    {
-                        response = extractRKV(&out, args[3], std::stol(args[2]), args[4] == "false" ? false : true);
-                        printBool(response);
-                    }
-                }
-            }
-            else if (args[0] == "load_dir")
-            {
-                if (!(argCount >= 4))
-                {
-                    printf("Incorrect Args\n");
-                }
-                else if (args[3] == "in")
-                {
-                    response = loadDirectoryIntoRKV(&in, args[1], args[2], args[4] == "false" ? false : true);
-                    printBool(response);
-                }
-                else if (args[3] == "out")
-                {
-                    response = loadDirectoryIntoRKV(&out, args[1], args[2], args[4] == "false" ? false : true);
+                    response = extractRKV(&in, args[3], std::stol(args[2]), args[4] == "false" ? false : true);
                     printBool(response);
                 }
             }
-            else if (args[0] == "generate")
+            else if (args[1] == "out")
             {
-                if (argCount != 2)
+                if (args[2] == "*")
                 {
-                    printf("Incorrect Args\n");
-                }
-                else if (args[1] == "in")
-                {
-                    response = generateRKV(&in);
+                    response = extractRKV(&out, args[3], -1, args[4] == "false" ? false : true);
                     printBool(response);
                 }
-                else if (args[1] == "out")
+                else
                 {
-                    response = generateRKV(&out);
+                    response = extractRKV(&out, args[3], std::stol(args[2]), args[4] == "false" ? false : true);
                     printBool(response);
                 }
             }
-            else if (args[0] == "save")
+        }
+        else if (args[0] == "load_dir")
+        {
+            if (!(argCount >= 4))
             {
-                if (argCount != 3)
-                {
-                    printf ("Incorrect Args\n");
-                }
-                else if (args[1] == "in")
-                {
-                    response = saveRKV(&in, args[2]);
-                    printBool(response);
-                }
-                else if (args[1] == "out")
-                {
-                    response = saveRKV(&out, args[2]);
-                    printBool(response);
-                }
+                printf("Incorrect Args\n");
+            }
+            else if (args[3] == "in")
+            {
+                response = loadDirectoryIntoRKV(&in, args[1], args[2], args[4] == "false" ? false : true);
+                printBool(response);
+            }
+            else if (args[3] == "out")
+            {
+                response = loadDirectoryIntoRKV(&out, args[1], args[2], args[4] == "false" ? false : true);
+                printBool(response);
+            }
+        }
+        else if (args[0] == "generate")
+        {
+            if (argCount != 2)
+            {
+                printf("Incorrect Args\n");
+            }
+            else if (args[1] == "in")
+            {
+                response = generateRKV(&in);
+                printBool(response);
+            }
+            else if (args[1] == "out")
+            {
+                response = generateRKV(&out);
+                printBool(response);
+            }
+        }
+        else if (args[0] == "save")
+        {
+            if (argCount != 3)
+            {
+                printf ("Incorrect Args\n");
+            }
+            else if (args[1] == "in")
+            {
+                response = saveRKV(&in, args[2]);
+                printBool(response);
+            }
+            else if (args[1] == "out")
+            {
+                response = saveRKV(&out, args[2]);
+                printBool(response);
             }
         }
         else
