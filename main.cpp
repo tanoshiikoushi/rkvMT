@@ -860,27 +860,12 @@ struct
     }
 } UngeneratedDirCompare;
 
-//physical file size always increases
-unsigned long long getRoundedFileSize_Small(unsigned long long s)
-{
-    unsigned long long c = s;
-    if ((c & 0xFFF) <= 0xA00)
-    {
-        c = (c & 0xFFFFFFFFFFFFF000) + 0x100; //rounds to nearest 0x100
-    }
-    else
-    {
-        c = (c & 0xFFFFFFFFFFFFF000) + 0x1000; //rounds to the nearest 0x1000
-    }
-    return c;
-}
-
-unsigned long long getRoundedFileSize_Large(unsigned long long s)
+unsigned long long getRoundedFileSize(unsigned long long s)
 {
     unsigned long long c = s;
     if ((c & 0xFFF) <= 0x800)
     {
-        c = (c & 0xFFFFFFFFFFFFF000) + 0x800; //rounds to nearest 0x100
+        c = (c & 0xFFFFFFFFFFFFF000) + 0x800; //rounds to nearest 0x800
     }
     else
     {
@@ -950,7 +935,7 @@ bool processFileEntry(RKVFile* r, std::unordered_map<std::string, unsigned long>
             r->files[working_id].crc32 = crc32(r->files[working_id].file_physical_data, r->files[working_id].file_size);
             r->files[working_id].timestamp = file_clock::to_time_t(fs::last_write_time(f.file_path));
             //EDIT THE ROUNDING MECHANISM HERE
-            r->files[working_id].physical_file_size = getRoundedFileSize_Large(r->files[working_id].file_size);
+            r->files[working_id].physical_file_size = getRoundedFileSize(r->files[working_id].file_size);
 
             r->files[working_id].physical_data_pointer = curr_data_pointer;
             curr_data_pointer += r->files[working_id].physical_file_size;
