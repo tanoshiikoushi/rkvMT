@@ -22,14 +22,14 @@ This tool can extract all versions of Ty the Tasmanian Tiger 1 and should work f
 
 The versions that RKVs can currently be built for are:
 - PC (tested)
+- Gamecube (tested)
 - Switch (in theory)
 - PS4 (in theory)
 - XBOX One (in theory)
 
 Effectively, all of the remasters should work.
 
-Versions that cannot be currently built (need extra testing):
-- Gamecube
+Versions that probably can be built (need extra testing):
 - Original XBOX
 - PS2 v1 and v2
 
